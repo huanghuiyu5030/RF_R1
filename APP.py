@@ -40,7 +40,6 @@ for feature, properties in feature_ranges.items():
         options = properties["options"]
         labels = properties["labels"]
         default_val = properties["default"]
-        # 找到默认值的索引
         try:
             default_index = options.index(default_val)
         except ValueError:
@@ -48,18 +47,27 @@ for feature, properties in feature_ranges.items():
         value = st.selectbox(
             label=f"{feature} (Select a value)",
             options=options,
-            format_func=lambda x, labels=labels: labels[x],  # 关键：用 labels 显示
+            format_func=lambda x, labels=labels: labels[x],
             index=default_index
         )
     feature_values.append(value)
 
 if st.button("Predict"):
-    # ===== 修改：创建带特征名的 DataFrame =====
+    # 创建带特征名的 DataFrame
     feature_names = list(feature_ranges.keys())
     input_df = pd.DataFrame([feature_values], columns=feature_names)
 
+    # ===== 新增：调整列顺序以匹配模型训练时的特征名 =====
+    if hasattr(model, 'feature_names_in_'):
+        try:
+            input_df = input_df[model.feature_names_in_]
+        except KeyError as e:
+            st.error(f"输入特征与模型不匹配。期望的特征名: {list(model.feature_names_in_)}")
+            st.stop()
+    # ==================================================
+
     # 模型预测
-    predicted_class = model.predict(input_df)[0]          # 使用 DataFrame
+    predicted_class = model.predict(input_df)[0]
     predicted_proba = model.predict_proba(input_df)[0]
 
     probability = predicted_proba[predicted_class] * 100
@@ -80,18 +88,26 @@ if st.button("Predict"):
 
     # 计算 SHAP 值
     explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(input_df)        # 使用 DataFrame
+    shap_values = explainer.shap_values(input_df)
 
-    # 生成 SHAP 力图（使用 matplotlib 模式返回 figure 对象）
-    class_index = predicted_class
-    # ===== 修改：正确保存 SHAP 图 =====
+    # 生成 SHAP 力图（根据模型类型处理 shap_values 格式）
+    # ===== 修改：兼容二分类和多分类 =====
+    if isinstance(shap_values, list):
+        # 二分类：shap_values 是长度为2的列表
+        shap_vals = shap_values[predicted_class]
+    else:
+        # 多分类：三维数组 (样本数, 特征数, 类别数)
+        shap_vals = shap_values[:, :, predicted_class]
+
     shap_fig = shap.force_plot(
-        explainer.expected_value[class_index],
-        shap_values[:, :, class_index],
+        explainer.expected_value[predicted_class] if isinstance(explainer.expected_value, list) else explainer.expected_value,
+        shap_vals,
         input_df,
-        matplotlib=True,            # 返回 matplotlib figure
-        show=False                   # 不立即显示
+        matplotlib=True,
+        show=False
     )
-    # 保存 figure 到文件
+    # ===================================
+
+    # 保存 SHAP 图
     shap_fig.savefig("shap_force_plot.png", bbox_inches='tight', dpi=1200)
     st.image("shap_force_plot.png")
