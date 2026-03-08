@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 # 加载保存的随机森林模型
 model = joblib.load('rf.pkl')
 
-# 特征范围定义
+# 特征范围定义（根据提供的特征范围和数据类型）
 feature_ranges = {
     "DVC": {"type": "numerical", "min": 0.000, "max": 1.000, "default": 0.89},
     "BMI": {"type": "numerical", "min": 10.000, "max": 50.000, "default": 28.555},
@@ -20,13 +20,12 @@ feature_ranges = {
     "Gender": {"type": "categorical", "options": [0,1], "default": 0, "labels": {0: "Female", 1: "Male"}},
 }
 
+# Streamlit 界面
 st.title("Prediction Model with SHAP Visualization")
 
+# 动态生成输入项
 st.header("Enter the following feature values:")
-
-# 用于存储用户输入的值
 feature_values = []
-
 for feature, properties in feature_ranges.items():
     if properties["type"] == "numerical":
         value = st.number_input(
@@ -36,50 +35,35 @@ for feature, properties in feature_ranges.items():
             value=float(properties["default"]),
         )
     elif properties["type"] == "categorical":
-        # ===== 修改：分类特征使用 labels 显示友好文本 =====
+        # ---------- 修改开始 ----------
         options = properties["options"]
         labels = properties["labels"]
         default_val = properties["default"]
-        try:
-            default_index = options.index(default_val)
-        except ValueError:
-            default_index = 0
-        value = st.selectbox(
-            label=f"{feature} (Select a value)",
-            options=options,
-            format_func=lambda x, labels=labels: labels[x],
-            index=default_index
-        )
+        # 找到默认值在 options 中的索引，若不存在则使用 0
+        # ---------- 修改结束 ----------
     feature_values.append(value)
 
+
+# 转换为模型输入格式
+features = np.array([feature_values])
+
+# 预测与 SHAP 可视化
 if st.button("Predict"):
-    # 创建带特征名的 DataFrame
-    feature_names = list(feature_ranges.keys())
-    input_df = pd.DataFrame([feature_values], columns=feature_names)
-
-    # ===== 新增：调整列顺序以匹配模型训练时的特征名 =====
-    if hasattr(model, 'feature_names_in_'):
-        try:
-            input_df = input_df[model.feature_names_in_]
-        except KeyError as e:
-            st.error(f"输入特征与模型不匹配。期望的特征名: {list(model.feature_names_in_)}")
-            st.stop()
-    # ==================================================
-
     # 模型预测
-    predicted_class = model.predict(input_df)[0]
-    predicted_proba = model.predict_proba(input_df)[0]
+    predicted_class = model.predict(features)[0]
+    predicted_proba = model.predict_proba(features)[0]
 
+    # 提取预测的类别概率
     probability = predicted_proba[predicted_class] * 100
 
-    # 显示预测结果（使用通用衬线字体避免字体缺失错误）
+    # 显示预测结果，使用 Matplotlib 渲染指定字体
     text = f"Based on feature values, predicted possibility of Thoracolumbar_fractures_shell is {probability:.2f}%"
     fig, ax = plt.subplots(figsize=(8, 1))
     ax.text(
         0.5, 0.5, text,
         fontsize=16,
         ha='center', va='center',
-        fontname='serif',           # ===== 修改：'Times New Roman' -> 'serif' =====
+        fontname='Times New Roman',
         transform=ax.transAxes
     )
     ax.axis('off')
@@ -88,26 +72,16 @@ if st.button("Predict"):
 
     # 计算 SHAP 值
     explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(input_df)
+    shap_values = explainer.shap_values(pd.DataFrame([feature_values], columns=feature_ranges.keys()))
 
-    # 生成 SHAP 力图（根据模型类型处理 shap_values 格式）
-    # ===== 修改：兼容二分类和多分类 =====
-    if isinstance(shap_values, list):
-        # 二分类：shap_values 是长度为2的列表
-        shap_vals = shap_values[predicted_class]
-    else:
-        # 多分类：三维数组 (样本数, 特征数, 类别数)
-        shap_vals = shap_values[:, :, predicted_class]
-
+    # 生成 SHAP 力图
+    class_index = predicted_class  # 当前预测类别
     shap_fig = shap.force_plot(
-        explainer.expected_value[predicted_class] if isinstance(explainer.expected_value, list) else explainer.expected_value,
-        shap_vals,
-        input_df,
+        explainer.expected_value[class_index],
+        shap_values[:,:,class_index],
+        pd.DataFrame([feature_values], columns=feature_ranges.keys()),
         matplotlib=True,
-        show=False
     )
-    # ===================================
-
-    # 保存 SHAP 图
-    shap_fig.savefig("shap_force_plot.png", bbox_inches='tight', dpi=1200)
+    # 保存并显示 SHAP 图
+    plt.savefig("shap_force_plot.png", bbox_inches='tight', dpi=1200)
     st.image("shap_force_plot.png")
