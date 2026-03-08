@@ -53,6 +53,9 @@ for feature, properties in feature_ranges.items():
         # ---------- 修改结束 ----------
     feature_values.append(value)
 
+feature_names = list(feature_ranges.keys())
+features_df = pd.DataFrame([feature_values], columns=feature_names)
+
 # 转换为模型输入格式
 features = np.array([feature_values])
 
