@@ -8,16 +8,31 @@ import matplotlib.pyplot as plt
 # 加载保存的随机森林模型
 model = joblib.load('rf.pkl')
 
-# 特征范围定义（根据提供的特征范围和数据类型）
+# 特征范围定义（含友好标签）
 feature_ranges = {
     "DVC": {"type": "numerical", "min": 0.000, "max": 1.000, "default": 0.89},
     "BMI": {"type": "numerical", "min": 10.000, "max": 50.000, "default": 28.555},
     "Age": {"type": "numerical", "min": 0.000, "max": 100.000, "default": 56},
     "DVR": {"type": "numerical", "min": 0.000, "max": 1.000, "default": 0.93},
     "Cobb": {"type": "numerical", "min": 0, "max": 50, "default": 34},
-    "AO_Spine": {"type": "categorical", "options": [0,1,2,3], "default": 2, "labels": {0: "A1", 1: "A2", 2: "A3", 3: "A4"}},
-    "BMD": {"type": "categorical", "options": [0,1,2], "default": 2, "labels": {0: "T ≥ -1.0", 1: "-2.5 <T <-1.0", 2:"T ≤ -2.5"}},
-    "Gender": {"type": "categorical", "options": [0,1], "default": 0, "labels": {0: "Female", 1: "Male"}},
+    "AO_Spine": {
+        "type": "categorical",
+        "options": [0, 1, 2, 3],
+        "default": 2,
+        "labels": {0: "A1", 1: "A2", 2: "A3", 3: "A4"}
+    },
+    "BMD": {
+        "type": "categorical",
+        "options": [0, 1, 2],
+        "default": 2,
+        "labels": {0: "T ≥ -1.0", 1: "-2.5 < T < -1.0", 2: "T ≤ -2.5"}
+    },
+    "Gender": {
+        "type": "categorical",
+        "options": [0, 1],
+        "default": 0,
+        "labels": {0: "Female", 1: "Male"}
+    },
 }
 
 # Streamlit 界面
@@ -35,14 +50,19 @@ for feature, properties in feature_ranges.items():
             value=float(properties["default"]),
         )
     elif properties["type"] == "categorical":
-        # ---------- 修改开始 ----------
-        options = properties["options"]
-        labels = properties["labels"]
-        default_val = properties["default"]
-        # 找到默认值在 options 中的索引，若不存在则使用 0
-        # ---------- 修改结束 ----------
+        # 按 options 顺序生成显示标签列表
+        display_options = [properties["labels"][opt] for opt in properties["options"]]
+        # 找到默认值在 options 中的索引
+        default_index = properties["options"].index(properties["default"])
+        selected_label = st.selectbox(
+            label=f"{feature}",
+            options=display_options,
+            index=default_index,
+        )
+        # 将选中的标签转换回数值
+        label_to_value = {properties["labels"][opt]: opt for opt in properties["options"]}
+        value = label_to_value[selected_label]
     feature_values.append(value)
-
 
 # 转换为模型输入格式
 features = np.array([feature_values])
@@ -70,17 +90,18 @@ if st.button("Predict"):
     plt.savefig("prediction_text.png", bbox_inches='tight', dpi=300)
     st.image("prediction_text.png")
 
-    # 计算 SHAP 值
+    # 计算 SHAP 值（多分类模型返回列表，每个元素对应一个类别）
     explainer = shap.TreeExplainer(model)
     shap_values = explainer.shap_values(pd.DataFrame([feature_values], columns=feature_ranges.keys()))
 
-    # 生成 SHAP 力图
+    # 生成 SHAP 力图（针对预测类别）
     class_index = predicted_class  # 当前预测类别
-    shap_fig = shap.force_plot(
-        explainer.expected_value[class_index],
-        shap_values[:,:,class_index],
+    shap.force_plot(
+        explainer.expected_value[class_index],          # 该类的期望值
+        shap_values[class_index],                        # 该类的 SHAP 值（形状: 样本数×特征数）
         pd.DataFrame([feature_values], columns=feature_ranges.keys()),
         matplotlib=True,
+        show=False                                        # 防止自动显示，便于保存
     )
     # 保存并显示 SHAP 图
     plt.savefig("shap_force_plot.png", bbox_inches='tight', dpi=1200)
