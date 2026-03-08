@@ -96,12 +96,17 @@ if st.button("Predict"):
         shap_vals = shap_values[:, :, predicted_class]
         expected_value = explainer.expected_value[predicted_class] if isinstance(explainer.expected_value, list) else explainer.expected_value
 
-    # ===== 新增：确保 expected_value 是标量（解决 SHAP 版本兼容性问题）=====
-    expected_value = np.asarray(expected_value).item()
+    # ===== 修改：安全地将 expected_value 转换为标量 =====
+    if hasattr(expected_value, 'size') and expected_value.size == 1:
+        expected_value = expected_value.item()
+    elif isinstance(expected_value, list) and len(expected_value) == 1:
+        expected_value = expected_value[0]
+    # 如果已经是标量（int/float），保持不变
+    # ===================================================
+
     # 确保 shap_vals 是二维 (1, n_features)
     if shap_vals.ndim == 1:
         shap_vals = shap_vals.reshape(1, -1)
-    # ================================================================
 
     # 生成 SHAP 力图（使用 matplotlib 模式返回 figure 对象）
     shap_fig = shap.force_plot(
