@@ -35,10 +35,22 @@ for feature, properties in feature_ranges.items():
             value=float(properties["default"]),
         )
     elif properties["type"] == "categorical":
+        # ---------- 修改开始 ----------
+        options = properties["options"]
+        labels = properties["labels"]
+        default_val = properties["default"]
+        # 找到默认值在 options 中的索引，若不存在则使用 0
+        try:
+            default_index = options.index(default_val)
+        except ValueError:
+            default_index = 0
         value = st.selectbox(
             label=f"{feature} (Select a value)",
-            options=properties["options"],
+            options=options,
+            format_func=lambda x, labels=labels: labels[x],  # 使用 labels 显示文本
+            index=default_index
         )
+        # ---------- 修改结束 ----------
     feature_values.append(value)
 
 # 转换为模型输入格式
