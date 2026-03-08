@@ -72,7 +72,7 @@ if st.button("Predict"):
         0.5, 0.5, text,
         fontsize=16,
         ha='center', va='center',
-        fontname='Times New Roman',
+        fontname='DejaVu Serif',
         transform=ax.transAxes
     )
     ax.axis('off')
