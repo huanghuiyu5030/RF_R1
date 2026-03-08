@@ -50,7 +50,7 @@ for feature, properties in feature_ranges.items():
     feature_values.append(value)
 
 if st.button("Predict"):
-    # ===== 修改：创建带特征名的 DataFrame，并确保列顺序与模型一致 =====
+    # 创建带特征名的 DataFrame，并确保列顺序与模型一致
     feature_names = list(feature_ranges.keys())
     input_df = pd.DataFrame([feature_values], columns=feature_names)
 
@@ -61,33 +61,32 @@ if st.button("Predict"):
         except KeyError as e:
             st.error(f"输入特征与模型不匹配。期望的特征名: {list(model.feature_names_in_)}")
             st.stop()
-    # ============================================================
 
-    # 模型预测（使用 DataFrame，避免特征名称警告）
+    # 模型预测
     predicted_class = model.predict(input_df)[0]
     predicted_proba = model.predict_proba(input_df)[0]
 
     probability = predicted_proba[predicted_class] * 100
 
-    # 显示预测结果（字体使用 'DejaVu Serif'，已通用）
-    text = f"Based on feature values, predicted possibility of AKI is {probability:.2f}%"
+    # 显示预测结果
+    text = f"Based on feature values, predicted possibility of ISP is {probability:.2f}%"
     fig, ax = plt.subplots(figsize=(8, 1))
     ax.text(
         0.5, 0.5, text,
         fontsize=16,
         ha='center', va='center',
-        fontname='DejaVu Serif',  # 已修改为通用衬线字体
+        fontname='DejaVu Serif',  # 通用衬线字体
         transform=ax.transAxes
     )
     ax.axis('off')
     plt.savefig("prediction_text.png", bbox_inches='tight', dpi=300)
     st.image("prediction_text.png")
 
-    # 计算 SHAP 值（传入 DataFrame）
+    # 计算 SHAP 值
     explainer = shap.TreeExplainer(model)
     shap_values = explainer.shap_values(input_df)
 
-    # ===== 修改：处理 shap_values 格式（兼容二分类和多分类） =====
+    # 处理 shap_values 格式（兼容二分类和多分类）
     if isinstance(shap_values, list):
         # 二分类：shap_values 是长度为2的列表
         shap_vals = shap_values[predicted_class]
@@ -96,7 +95,13 @@ if st.button("Predict"):
         # 多分类：三维数组 (样本数, 特征数, 类别数)
         shap_vals = shap_values[:, :, predicted_class]
         expected_value = explainer.expected_value[predicted_class] if isinstance(explainer.expected_value, list) else explainer.expected_value
-    # =========================================================
+
+    # ===== 新增：确保 expected_value 是标量（解决 SHAP 版本兼容性问题）=====
+    expected_value = np.asarray(expected_value).item()
+    # 确保 shap_vals 是二维 (1, n_features)
+    if shap_vals.ndim == 1:
+        shap_vals = shap_vals.reshape(1, -1)
+    # ================================================================
 
     # 生成 SHAP 力图（使用 matplotlib 模式返回 figure 对象）
     shap_fig = shap.force_plot(
@@ -107,6 +112,6 @@ if st.button("Predict"):
         show=False
     )
 
-    # ===== 修改：正确保存 SHAP 图 =====
+    # 保存并显示 SHAP 图
     shap_fig.savefig("shap_force_plot.png", bbox_inches='tight', dpi=1200)
     st.image("shap_force_plot.png")
